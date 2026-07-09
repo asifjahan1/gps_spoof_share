@@ -125,6 +125,7 @@ class SpoofService : Service() {
     private fun startSpoofingLoop() {
         isSpoofing = true
         spoofJob = CoroutineScope(Dispatchers.IO).launch {
+            var bleUpdateCounter = 0
             while (isActive && isSpoofing) {
                 try {
                     val currentTime = System.currentTimeMillis()
@@ -165,18 +166,21 @@ class SpoofService : Service() {
                         }
                     }
                     
-                    val packet = JSONObject().apply {
-                        put("lat", currentLat)
-                        put("lng", currentLng)
-                        put("ts", currentTime)
-                    }.toString().toByteArray(Charsets.UTF_8)
-                    
-                    broadcastBLE(packet)
+                    if (bleUpdateCounter % 10 == 0) {
+                        val packet = JSONObject().apply {
+                            put("lat", currentLat)
+                            put("lng", currentLng)
+                            put("ts", currentTime)
+                        }.toString().toByteArray(Charsets.UTF_8)
+                        
+                        broadcastBLE(packet)
+                    }
+                    bleUpdateCounter++
                     
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to set mock location", e)
                 }
-                delay(1000) // 1 second interval
+                delay(100) // 100ms interval to aggressively override real location
             }
         }
     }

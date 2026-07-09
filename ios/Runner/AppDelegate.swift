@@ -18,7 +18,6 @@ import GoogleMaps
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
       
-    GMSServices.provideAPIKey("AIzaSyDP2NVAQ3Q_aga2pZDXRYgSvTNxoJ9-1j4")
     GeneratedPluginRegistrant.register(with: self)
       
     if let registrar = self.registrar(forPlugin: "NativeBridge") {
@@ -28,6 +27,14 @@ import GoogleMaps
         
         methodChannel?.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
             switch call.method {
+            case "setGoogleMapsApiKey":
+                if let args = call.arguments as? [String: Any],
+                   let apiKey = args["apiKey"] as? String {
+                    GMSServices.provideAPIKey(apiKey)
+                    result("API Key Set")
+                } else {
+                    result(FlutterError(code: "INVALID_ARGS", message: "API Key missing", details: nil))
+                }
             case "startReceiving":
                 self?.startReceiving()
                 result("Receiving Started")

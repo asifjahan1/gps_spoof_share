@@ -1,12 +1,15 @@
+import 'dart:async';
+// import 'dart:math' as math;
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart'; // Added
 import 'package:get/get.dart';
 import 'package:flutter/services.dart';
-import 'dart:io';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
-
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 
 class HomeController extends GetxController {
   final _nativeBridge = const MethodChannel(
@@ -16,15 +19,30 @@ class HomeController extends GetxController {
   final isAndroid = (!kIsWeb && Platform.isAndroid).obs;
   final isActive = false.obs;
 
-  // Default to a fallback location, will be updated immediately
-  final currentPosition = const LatLng(37.7749, -122.4194).obs;
+  // Fixed initial position for GoogleMap to prevent re-rendering the platform view
+  final initialPosition = const LatLng(23.8103, 90.4125);
+  final currentPosition = const LatLng(23.8103, 90.4125).obs;
+
   GoogleMapController? mapController;
+
+  // Route Simulation Variables
+  final polylines = <Polyline>[].obs;
+  Timer? _routeTimer;
+  List<LatLng> _currentRoute = [];
+  int _routeIndex = 0;
+  final double _simulationSpeedKmH = 40.0; // 40 km/h simulation speed
 
   @override
   void onInit() {
     super.onInit();
     _requestPermissionsAndLocation();
     _setupMethodChannelListener();
+  }
+
+  @override
+  void onClose() {
+    _routeTimer?.cancel();
+    super.onClose();
   }
 
   Future<void> _requestPermissionsAndLocation() async {
@@ -44,7 +62,7 @@ class HomeController extends GetxController {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (serviceEnabled) {
         Position? position = await Geolocator.getLastKnownPosition();
-        
+
         position ??= await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
@@ -83,6 +101,7 @@ class HomeController extends GetxController {
           isAndroid.value ? 'stopSpoofing' : 'stopReceiving',
         );
         isActive.value = false;
+        _stopSimulation();
       } catch (e) {
         Get.snackbar("Error", "Failed to stop: $e");
       }
@@ -94,12 +113,8 @@ class HomeController extends GetxController {
         );
         isActive.value = true;
 
-        // Immediately sync the current location to the native spoof service on Android
         if (isAndroid.value) {
-          _nativeBridge.invokeMethod('updateSpoofLocation', {
-            'lat': currentPosition.value.latitude,
-            'lng': currentPosition.value.longitude,
-          });
+          _updateNativeLocation(currentPosition.value);
         }
       } catch (e) {
         if (e is PlatformException && e.code == 'MOCK_LOCATION_NOT_ENABLED') {
@@ -119,17 +134,144 @@ class HomeController extends GetxController {
 
   void onMapCreated(GoogleMapController controller) {
     mapController = controller;
+    // Animate to current position once map is created
+    mapController?.animateCamera(CameraUpdate.newLatLng(currentPosition.value));
   }
 
   void onMapTap(LatLng position) {
     if (isAndroid.value) {
+      _stopSimulation(); // Stop any active auto-pilot
       currentPosition.value = position;
       if (isActive.value) {
-        _nativeBridge.invokeMethod('updateSpoofLocation', {
-          'lat': position.latitude,
-          'lng': position.longitude,
-        });
+        _updateNativeLocation(position);
       }
     }
+  }
+
+  void onMapLongPress(LatLng destination) async {
+    if (!isAndroid.value || !isActive.value) return;
+
+    Get.snackbar("Calculating Route", "Finding path to destination...");
+
+    try {
+      final start = currentPosition.value;
+      final url = Uri.parse(
+        'http://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=polyline',
+      );
+
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['routes'] != null && data['routes'].isNotEmpty) {
+          final String polylineStr = data['routes'][0]['geometry'];
+          _currentRoute = _decodePolyline(polylineStr);
+
+          if (_currentRoute.isNotEmpty) {
+            polylines.value = [
+              Polyline(
+                polylineId: const PolylineId('route'),
+                color: Colors.blue,
+                width: 5,
+                points: _currentRoute,
+              ),
+            ];
+            _startSimulation();
+          }
+        }
+      } else {
+        Get.snackbar("Error", "Failed to find a route.");
+      }
+    } catch (e) {
+      Get.snackbar("Error", "Route calculation failed: $e");
+    }
+  }
+
+  void _startSimulation() {
+    _stopSimulation();
+    _routeIndex = 0;
+
+    // Simulate at 10Hz
+    _routeTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (_routeIndex >= _currentRoute.length - 1) {
+        _stopSimulation();
+        Get.snackbar("Arrived", "You have reached your destination.");
+        return;
+      }
+
+      final start = currentPosition.value;
+      final end = _currentRoute[_routeIndex + 1];
+
+      // Calculate distance to next point
+      final distance = Geolocator.distanceBetween(
+        start.latitude,
+        start.longitude,
+        end.latitude,
+        end.longitude,
+      );
+
+      // Distance moved in 100ms at simulation speed
+      final moveDist = (_simulationSpeedKmH * 1000 / 3600) * 0.1;
+
+      if (distance <= moveDist) {
+        // Reached next point
+        currentPosition.value = end;
+        _routeIndex++;
+      } else {
+        // Interpolate point
+        final ratio = moveDist / distance;
+        final newLat = start.latitude + (end.latitude - start.latitude) * ratio;
+        final newLng =
+            start.longitude + (end.longitude - start.longitude) * ratio;
+        currentPosition.value = LatLng(newLat, newLng);
+      }
+
+      mapController?.animateCamera(
+        CameraUpdate.newLatLng(currentPosition.value),
+      );
+      _updateNativeLocation(currentPosition.value);
+    });
+  }
+
+  void _stopSimulation() {
+    _routeTimer?.cancel();
+    _routeTimer = null;
+    polylines.clear();
+  }
+
+  void _updateNativeLocation(LatLng pos) {
+    _nativeBridge.invokeMethod('updateSpoofLocation', {
+      'lat': pos.latitude,
+      'lng': pos.longitude,
+    });
+  }
+
+  List<LatLng> _decodePolyline(String encoded) {
+    List<LatLng> poly = [];
+    int index = 0, len = encoded.length;
+    int lat = 0, lng = 0;
+
+    while (index < len) {
+      int b, shift = 0, result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      poly.add(LatLng((lat / 1E5).toDouble(), (lng / 1E5).toDouble()));
+    }
+    return poly;
   }
 }

@@ -16,56 +16,77 @@ class HomeView extends GetView<HomeController> {
           ),
         ),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: Stack(
-              children: [
-                Obx(
-                  () => GoogleMap(
-                    initialCameraPosition: CameraPosition(
-                      target: controller.currentPosition.value,
-                      zoom: 14.0,
-                    ),
-                    onMapCreated: controller.onMapCreated,
-                    onTap: controller.onMapTap,
-                    markers: {
-                      Marker(
-                        markerId: const MarkerId('target'),
-                        position: controller.currentPosition.value,
-                        infoWindow: const InfoWindow(title: 'Current Location'),
-                      ),
-                    },
-                  ),
+          // Optimize Map: The initialCameraPosition is static to prevent deep rebuilds.
+          // Changes to currentPosition will animate the camera via the controller.
+          Obx(
+            () => GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: controller.initialPosition,
+                zoom: 14.0,
+              ),
+              mapType: MapType.satellite,
+              onMapCreated: controller.onMapCreated,
+              onTap: controller.onMapTap,
+              onLongPress: controller.onMapLongPress, // Added for Auto-Pilot
+              polylines: controller.polylines.toSet(),
+              markers: {
+                Marker(
+                  markerId: const MarkerId('target'),
+                  position: controller.currentPosition.value,
+                  infoWindow: const InfoWindow(title: 'Current Location'),
                 ),
-                Positioned(
-                  bottom: 30,
-                  left: 20,
-                  right: 20,
-                  child: Obx(
-                    () => ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: controller.isActive.value
-                            ? Colors.red
-                            : Colors.green,
-                      ),
-                      onPressed: controller.toggleAction,
-                      child: Text(
-                        controller.isActive.value
-                            ? 'Stop'
-                            : (controller.isAndroid.value
-                                  ? 'Start Spoofing & Broadcast'
-                                  : 'Start Scanning & Track'),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
+              },
+            ),
+          ),
+
+          // Instructions Toast
+          Positioned(
+            top: 20,
+            left: 20,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Obx(
+                () => Text(
+                  controller.isActive.value
+                      ? "Tap to teleport. Long Press to Auto-Pilot to a destination! 🚗"
+                      : "Start Spoofing first to simulate movement.",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
-              ],
+              ),
+            ),
+          ),
+
+          // Start/Stop Button
+          Positioned(
+            bottom: 30,
+            left: 20,
+            right: 20,
+            child: Obx(
+              () => ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: controller.isActive.value
+                      ? Colors.red
+                      : Colors.green,
+                ),
+                onPressed: controller.toggleAction,
+                child: Text(
+                  controller.isActive.value
+                      ? 'Stop'
+                      : (controller.isAndroid.value
+                            ? 'Start Spoofing & Broadcast'
+                            : 'Start Scanning & Track'),
+                  style: const TextStyle(fontSize: 18, color: Colors.white),
+                ),
+              ),
             ),
           ),
         ],
