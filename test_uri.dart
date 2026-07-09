@@ -1,0 +1,11 @@
+import 'dart:core';
+
+void main() {
+  final start_longitude = 90.4125;
+  final start_latitude = 23.8103;
+  final destination_longitude = 90.4200;
+  final destination_latitude = 23.8200;
+  final urlStr = 'http://router.project-osrm.org/route/v1/driving/${start_longitude},${start_latitude};${destination_longitude},${destination_latitude}?overview=full&geometries=polyline';
+  final url = Uri.parse(urlStr);
+  print(url.toString());
+}

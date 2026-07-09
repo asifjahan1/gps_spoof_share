@@ -10,6 +10,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import '../../../data/models/ble_location_data.dart';
+import '../../ble/controllers/ble_controller.dart';
 
 class HomeController extends GetxController {
   final _nativeBridge = const MethodChannel(
@@ -52,10 +54,15 @@ class HomeController extends GetxController {
         Permission.bluetooth,
         Permission.bluetoothAdvertise,
         Permission.bluetoothConnect,
+        Permission.bluetoothScan,
         Permission.notification,
       ].request();
     } else if (Platform.isIOS) {
       await [Permission.location, Permission.bluetooth].request();
+    }
+
+    if (Get.isRegistered<BleController>()) {
+      Get.find<BleController>().onPermissionsGranted();
     }
 
     try {
@@ -155,8 +162,11 @@ class HomeController extends GetxController {
 
     try {
       final start = currentPosition.value;
-      final url = Uri.parse(
-        'http://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=polyline',
+      // Use HTTPS to prevent Android cleartext blocks/interceptions, and build the URI properly
+      final url = Uri.https(
+        'router.project-osrm.org',
+        '/route/v1/driving/${start.longitude},${start.latitude};${destination.longitude},${destination.latitude}',
+        {'overview': 'full', 'geometries': 'polyline'},
       );
 
       final response = await http.get(url);
@@ -243,6 +253,18 @@ class HomeController extends GetxController {
       'lat': pos.latitude,
       'lng': pos.longitude,
     });
+  }
+
+  /// Called by [BleController] when a GPS location update is received from
+  /// the BLE host device.  Updates the map position and, if spoofing is
+  /// active, pushes the coordinates into the native mock-location pipeline.
+  void onBleLocationReceived(BleLocationData data) {
+    final newPos = LatLng(data.latitude, data.longitude);
+    currentPosition.value = newPos;
+    mapController?.animateCamera(CameraUpdate.newLatLng(newPos));
+    if (isActive.value) {
+      _updateNativeLocation(newPos);
+    }
   }
 
   List<LatLng> _decodePolyline(String encoded) {

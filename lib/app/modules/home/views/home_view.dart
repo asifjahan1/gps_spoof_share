@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../controllers/home_controller.dart';
+import '../../../routes/app_pages.dart';
 
 class HomeView extends GetView<HomeController> {
   const HomeView({super.key});
@@ -15,6 +16,13 @@ class HomeView extends GetView<HomeController> {
             controller.isAndroid.value ? 'Sender (Android)' : 'Receiver (iOS)',
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bluetooth),
+            tooltip: 'BLE Devices',
+            onPressed: () => Get.toNamed(Routes.BLE),
+          ),
+        ],
       ),
       body: Stack(
         children: [
@@ -26,7 +34,7 @@ class HomeView extends GetView<HomeController> {
                 target: controller.initialPosition,
                 zoom: 14.0,
               ),
-              mapType: MapType.satellite,
+              mapType: MapType.hybrid,
               onMapCreated: controller.onMapCreated,
               onTap: controller.onMapTap,
               onLongPress: controller.onMapLongPress, // Added for Auto-Pilot
@@ -66,7 +74,7 @@ class HomeView extends GetView<HomeController> {
 
           // Start/Stop Button
           Positioned(
-            bottom: 30,
+            bottom: 100,
             left: 20,
             right: 20,
             child: Obx(

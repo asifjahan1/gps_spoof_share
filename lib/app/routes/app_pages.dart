@@ -3,6 +3,8 @@ import '../modules/home/bindings/home_binding.dart';
 import '../modules/home/views/home_view.dart';
 import '../modules/auth/bindings/auth_binding.dart';
 import '../modules/auth/views/auth_view.dart';
+import '../modules/ble/bindings/ble_binding.dart';
+import '../modules/ble/views/ble_view.dart';
 
 part 'app_routes.dart';
 
@@ -22,5 +24,11 @@ class AppPages {
       page: () => const AuthView(),
       binding: AuthBinding(),
     ),
+    GetPage(
+      name: _Paths.BLE,
+      page: () => const BleView(),
+      binding: BleBinding(),
+    ),
   ];
 }
+

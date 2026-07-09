@@ -11,7 +11,9 @@ import android.content.Context
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.gpsspoofshare/native_bridge"
+    private val BLE_DISCOVERY_CHANNEL = "com.example.gpsspoofshare/ble_discovery"
     private var multicastLock: WifiManager.MulticastLock? = null
+    private var bleDiscoveryManager: BleDiscoveryManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,10 +28,13 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         super.onDestroy()
         multicastLock?.release()
+        bleDiscoveryManager?.destroy()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // ── Existing native bridge channel (spoofing) ────────────────────────
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "startSpoofing" -> {
@@ -52,6 +57,61 @@ class MainActivity : FlutterActivity() {
                     intent.putExtra("lat", lat)
                     intent.putExtra("lng", lng)
                     sendBroadcast(intent)
+                    result.success(null)
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+
+        // ── BLE discovery channel (new) ──────────────────────────────────────
+        bleDiscoveryManager = BleDiscoveryManager(this)
+        val bleChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BLE_DISCOVERY_CHANNEL)
+        bleDiscoveryManager?.channel = bleChannel
+
+        bleChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isBluetoothOn" -> {
+                    result.success(bleDiscoveryManager?.isBluetoothOn() ?: false)
+                }
+                "startScan" -> {
+                    bleDiscoveryManager?.startScan()
+                    result.success(null)
+                }
+                "stopScan" -> {
+                    bleDiscoveryManager?.stopScan()
+                    result.success(null)
+                }
+                "connectToDevice" -> {
+                    val id = call.argument<String>("id") ?: ""
+                    bleDiscoveryManager?.connectToDevice(id)
+                    result.success(null)
+                }
+                "disconnectDevice" -> {
+                    val id = call.argument<String>("id") ?: ""
+                    bleDiscoveryManager?.disconnectDevice(id)
+                    result.success(null)
+                }
+                "startHostMode" -> {
+                    bleDiscoveryManager?.startHostMode()
+                    result.success(null)
+                }
+                "stopHostMode" -> {
+                    bleDiscoveryManager?.stopHostMode()
+                    result.success(null)
+                }
+                "startClientMode" -> {
+                    bleDiscoveryManager?.startClientMode()
+                    result.success(null)
+                }
+                "stopClientMode" -> {
+                    bleDiscoveryManager?.stopClientMode()
+                    result.success(null)
+                }
+                "broadcastLocation" -> {
+                    val json = call.arguments as? String ?: ""
+                    bleDiscoveryManager?.broadcastLocation(json)
                     result.success(null)
                 }
                 else -> {
@@ -90,3 +150,4 @@ class MainActivity : FlutterActivity() {
         return isMockLocation
     }
 }
+

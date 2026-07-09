@@ -10,6 +10,9 @@ import GoogleMaps
   var spoofPeripheral: CBPeripheral?
   var methodChannel: FlutterMethodChannel?
   
+  // BLE Discovery Manager (separate from existing BLE)
+  var bleDiscoveryManager: BleDiscoveryManager?
+  
   let SERVICE_UUID = CBUUID(string: "8e6c7087-0b1a-4648-9366-239617fa7259")
   let CHAR_UUID = CBUUID(string: "90b6d267-33e1-4c6e-827a-8f9f60cb0fc0")
 
@@ -41,6 +44,65 @@ import GoogleMaps
             case "stopReceiving":
                 self?.stopReceiving()
                 result("Receiving Stopped")
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+    }
+    
+    // ── BLE Discovery Channel (new, separate from existing BLE) ──────────
+    if let registrar = self.registrar(forPlugin: "BleDiscovery") {
+        bleDiscoveryManager = BleDiscoveryManager()
+        let bleChannel = FlutterMethodChannel(
+            name: "com.example.gpsspoofshare/ble_discovery",
+            binaryMessenger: registrar.messenger()
+        )
+        bleDiscoveryManager?.channel = bleChannel
+        
+        bleChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
+            guard let manager = self?.bleDiscoveryManager else {
+                result(FlutterError(code: "NOT_INIT", message: "BLE manager not initialized", details: nil))
+                return
+            }
+            
+            switch call.method {
+            case "isBluetoothOn":
+                result(manager.isBluetoothOn())
+            case "startScan":
+                manager.startScan()
+                result(nil)
+            case "stopScan":
+                manager.stopScan()
+                result(nil)
+            case "connectToDevice":
+                if let args = call.arguments as? [String: Any],
+                   let id = args["id"] as? String {
+                    manager.connectToDevice(id)
+                }
+                result(nil)
+            case "disconnectDevice":
+                if let args = call.arguments as? [String: Any],
+                   let id = args["id"] as? String {
+                    manager.disconnectDevice(id)
+                }
+                result(nil)
+            case "startHostMode":
+                manager.startHostMode()
+                result(nil)
+            case "stopHostMode":
+                manager.stopHostMode()
+                result(nil)
+            case "startClientMode":
+                manager.startClientMode()
+                result(nil)
+            case "stopClientMode":
+                manager.stopClientMode()
+                result(nil)
+            case "broadcastLocation":
+                if let json = call.arguments as? String {
+                    manager.broadcastLocation(json)
+                }
+                result(nil)
             default:
                 result(FlutterMethodNotImplemented)
             }
@@ -130,3 +192,4 @@ import GoogleMaps
       }
   }
 }
+
