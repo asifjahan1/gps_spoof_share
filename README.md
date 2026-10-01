@@ -2,7 +2,7 @@
 
 A cross-platform Flutter application that allows an Android device to spoof its GPS location and broadcast those spoofed coordinates via Bluetooth Low Energy (BLE) to an iOS device.
 
-## 📱 How It Works (100% Truth)
+## How It Works
 
 This app utilizes platform-specific native code (Kotlin for Android, Swift for iOS) to achieve hardware-level functionality that Flutter cannot do alone. 
 
